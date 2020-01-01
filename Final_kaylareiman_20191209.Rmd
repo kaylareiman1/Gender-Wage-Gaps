@@ -4,7 +4,7 @@ author: "Kayla Reiman"
 date: "12/9/2019"
 output: html_document
 ---
-#### **Research prompt**: Is there a significant difference in income between men and women? Does the difference vary depending on other factors (e.g., education, marital status, criminal history, drug use, childhood household factors, profession, etc.)?
+### **Research prompt**: Is there a significant difference in income between men and women? Does the difference vary depending on other factors (e.g., education, marital status, criminal history, drug use, childhood household factors, profession, etc.)?
 
 **Hypothesis and process**: I expect to see income differences by gender, and I also expect income to differ based on race, teenage poverty, marital status, and education levels. I do not expect that adding a covariate for industry will fix these disparities. 
 
@@ -15,9 +15,8 @@ Acknowledgement: my conceptual work on this project was informed by discussions 
 knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
 ```
 
-
 ```{r, message = FALSE}
-#Import requisite library
+#Import requisite libraries
 library(tidyverse)
 library(knitr)
 library(gridExtra)
@@ -28,7 +27,7 @@ options(scipen = 4)
 #### **Step 1: Import the data and clean it**
 The data were read from the the  National Longitudinal Survey of Youth (NLSY) 1979 cohort's 2012 dataset, which included over 30 years of follow-up data on a cohort of people who were teenagers in 1979. Although this dataset included many attributes for each respondent, only the most theoretically relevant demographic characteristics were used in this analysis: income, gender, race, teenage poverty, education, marital status, and urban/rural living situation.
 
-When cleaning the data, each factor was coded to show the  most privileged and/or most common category first. For example, gender was coded with males first so that men can be the default category. For race, "Other" is coded first since that includes white people. The exception to this ordered coding is for education, where the lowest level was coded as the baseline. More information about data cleaning is shown in the appendix.
+When cleaning the data, each factor was coded to show the  most privileged and/or most common category first. For example, gender was coded with males first so that men are the default category. For race, "Other" is coded first since that includes white people. The exception to this ordered coding is for education, where the lowest level was coded as the baseline. More information about data cleaning is shown in the appendix.
 ```{r }
 #Read dataset from Professor Chouldechova's website
 nlsy <- read_csv("http://www.andrew.cmu.edu/user/achoulde/94842/final_project/nlsy79/nlsy79_income.csv")
@@ -45,7 +44,7 @@ nlsy <- nlsy %>%
           orig_urban        = T4114600 ,
   )
 
-#Recoding -- see appendix for details about decisions
+#Recode variables -- see appendix for details about decisions
 nlsy <- mutate(nlsy, 
                   gender = recode_factor(orig_gender, 
                                          `1` = "Male",                             
@@ -118,15 +117,15 @@ nlsy <- nlsy %>%
 survey.notopcode <- nlsy %>%
   filter(top2pct==0 & income >= 0)
 
-#Create a version of teh survey dataset that drops observations with missing income
+#Create a version of the survey dataset that only drops observations missing income in 2012
 survey.2012 <- nlsy %>%
   filter(income >=0)
 
 ```
 
-#### **Step 2: Summarize the data through plots**
+### **Step 2: Summarize the data through plots**
 
-**Step 2A: Examine plots that define the target population**
+####**Step 2A: Examine plots that define the target population**
 
 **Distribution of Gender**: As expected, the data contain a roughly equal proportion of men and women -- both in the full dataset and the subset that includes people who reported income in 2012. While unlikely to bias the analysis substantially, it is worth noting that women have a slightly higher response rate than men in the 2012 follow-up survey (`r round(100*nrow(survey.2012[survey.2012$gender=="Female",])/nrow(nlsy[nlsy$gender=="Female",]), 0)`% and `r round(100*nrow(survey.2012[survey.2012$gender=="Male",])/nrow(nlsy[nlsy$gender=="Male",]), 0)`% respectively). There were no respondents with missing or non-binary values for gender. 
 
