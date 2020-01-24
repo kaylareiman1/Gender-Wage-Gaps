@@ -1,0 +1,868 @@
+---
+title: "Analysis of Income by Gender"
+author: "Kayla Reiman"
+date: "12/9/2019"
+output: html_document
+---
+#### **Research prompt**: Is there a significant difference in income between men and women? Does the difference vary depending on other factors (e.g., education, marital status, criminal history, drug use, childhood household factors, profession, etc.)?
+
+**Hypothesis and process**: I expect to see income differences by gender, and I also expect income to differ based on race, teenage poverty, marital status, and education levels. I do not expect that adding a covariate for industry will fix these disparities. 
+
+Acknowledgement: my conceptual work on this project was informed by discussions with classmates Erika Montana and Betti Liu.
+
+```{r global_options, include=FALSE}
+#This code chunk sets up the HTML output to not show code by default.  
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+
+```{r, message = FALSE}
+#Import requisite library
+library(tidyverse)
+library(knitr)
+library(gridExtra)
+#Format numbers so that they are not in scientific notation.
+options(scipen = 4)
+```
+
+#### **Step 1: Import the data and clean it**
+The data were read from the the  National Longitudinal Survey of Youth (NLSY) 1979 cohort's 2012 dataset, which included over 30 years of follow-up data on a cohort of people who were teenagers in 1979. Although this dataset included many attributes for each respondent, only the most theoretically relevant demographic characteristics were used in this analysis: income, gender, race, teenage poverty, education, marital status, and urban/rural living situation.
+
+When cleaning the data, each factor was coded to show the  most privileged and/or most common category first. For example, gender was coded with males first so that men can be the default category. For race, "Other" is coded first since that includes white people. The exception to this ordered coding is for education, where the lowest level was coded as the baseline. More information about data cleaning is shown in the appendix.
+```{r }
+nlsy <- read_csv("http://www.andrew.cmu.edu/user/achoulde/94842/final_project/nlsy79/nlsy79_income.csv")
+#Rename vars
+nlsy <- nlsy %>%
+  rename( orig_income =T3977400,
+          orig_gender =R0214800,
+          highestgrade =T4113000 ,
+          orig_industry =T3308200 ,
+          orig_marital =R7006900,
+          orig_race =R0214700,
+          orig_childpoverty =R0217910,
+          orig_urban =T4114600 ,
+  )
+#Recoding -- see appendix for details about decisions
+nlsy <- mutate(nlsy, 
+                  gender = recode_factor(orig_gender, 
+                                         `1` = "Male",                             
+                                         `2` = "Female",
+                  ),
+                  race = recode_factor(orig_race,
+                                       `3` = "Other",
+                                       `1` = "Hispanic",
+                                       `2` = "Black",
+                  ),
+                  urban = recode_factor(orig_urban,
+                                        `1` = "Urban",
+                                        `0` = "Rural",
+                                        .default = NA_character_
+                  ),
+                  childpoverty = recode_factor(orig_childpoverty,
+                                        `0` = "No",
+                                        `1` = "Yes",
+                                        .default = "Unknown"
+                  ), 
+                  marital = recode_factor(orig_marital,
+                                        `2` = "Married in 2000",
+                                        `1` = "Not married in 2000",
+                                        `3` = "Other in 2000",
+                                        .default = "Unknown"
+                  ),
+                   income = ifelse(orig_income < 0, NA, orig_income),
+                   top2pct  = ifelse(orig_income == max(orig_income), 1, ifelse(orig_income < 0, NA, 0) ),
+                    missingincome.2012 = ifelse(orig_income < 0, 1, 0),
+                    industry =(
+                      case_when(
+                        orig_industry == -5   ~ NA_character_,
+                        orig_industry == -4   ~ "Valid skip: not working",
+                        orig_industry <= 690 ~ "Other",
+                        orig_industry == 770 ~ "Construction",
+                        orig_industry <=3900 ~ "Manufacturing",
+                        orig_industry <=4590 ~ "Wholesale trade",
+                        orig_industry <=5790 ~ "Retail trade",
+                        orig_industry <=6390 ~ "Transportation + Warehousing",
+                        orig_industry <=6780 ~ "Information",
+                        orig_industry <=6990 ~ "Finance + Insurance",
+                        orig_industry <=7190 ~ "Real Estate",
+                        orig_industry <=7490 ~ "Professional, Science, Tech",
+                        orig_industry <=7790 ~ "Management + Admin + Waste Management",
+                        orig_industry <=7890 ~ "Education",
+                        orig_industry <=8470 ~ "Health Care + Social Assistance",
+                        orig_industry <=8590 ~ "Arts + Entertainment + Recreation",
+                        orig_industry <=8690 ~ "Accomodations + Food service",
+                        orig_industry <=9290 ~ "Services: Other",
+                         orig_industry <=9870 ~ "Public Admin + Military",
+                        orig_industry > 9870 ~ "Other"
+                      )),
+                    orig_edu.bin = as.factor(case_when(
+                      highestgrade <= 11 ~ "No HS Diploma",
+                      highestgrade == 12 ~ "High School",
+                      highestgrade <  16 ~ "Some College",
+                      highestgrade == 16 ~ "Bachelors",
+                      highestgrade >  16 ~ "Grad School")))
+
+nlsy <- nlsy %>% 
+  mutate(edu.bin  = recode_factor(orig_edu.bin,
+    `4` = "No HS Diploma",
+    `3` = "High School",
+    `5` = "Some College",
+    `1` = "Bachelors",
+    `2` = "Grad School")
+)
+
+survey.notopcode <- nlsy %>%
+  filter(top2pct==0 & income >= 0)
+
+survey.2012 <- nlsy %>%
+  filter(income >=0)
+
+```
+
+#### **Step 2: Summarize the data through plots**
+
+**Step 2A: Examine plots that define the target population**
+
+**Distribution of Gender**: As expected, the data contain a roughly equal proportion of men and women -- both in the full dataset and the subset that includes people who reported income in 2012. While unlikely to bias the analysis substantially, it is worth noting that women have a slightly higher response rate than men in the 2012 follow-up survey (`r round(100*nrow(survey.2012[survey.2012$gender=="Female",])/nrow(nlsy[nlsy$gender=="Female",]), 0)`% and `r round(100*nrow(survey.2012[survey.2012$gender=="Male",])/nrow(nlsy[nlsy$gender=="Male",]), 0)`% respectively). There were no respondents with missing or non-binary values for gender. 
+
+```{r}
+gender.palette <- scale_fill_manual(values = c("#7bb3ff", "#9e379f"))
+plot.gender1 <- ggplot(data = nlsy, aes(x=gender, fill = gender))
+uni.gender1 <- plot.gender1 + geom_bar(stat = "count") + ggtitle("Full Sample\nN= 12,686") + gender.palette + ylim(0,6500)+ guides(fill = FALSE)
+
+plot.gender2 <- ggplot(data = survey.2012, aes(x=gender, fill = gender))
+uni.gender2 <- plot.gender2 + geom_bar(stat = "count") + ggtitle("2012 Income respondents\nN = 7,024") + gender.palette + ylim(0,6500)+ guides(fill = FALSE)
+
+grid.arrange(uni.gender1, uni.gender2, ncol = 2)
+
+top2pct <- survey.2012 %>%
+  filter(income == max(survey.2012$income)) %>%
+  group_by(gender) %>%
+  summarize(count = n())
+```
+
+**2012 Income**: The 2012 income distribution by gender is shown below. Notably,  women are concentrated at zero income and under $50,000 in annual earnings. Men have a higher density than women between $50,000 and $200,000 and at the very highest part of the plot. Both genders have first modes at zero and second modes under $100,000, though men's second mode is higher than that of women.
+
+Notes: Thank you to Jeff Scanlon for the idea of this plot. 
+```{r}
+gender.dense1 <-  ggplot(data = survey.2012, aes(x = income)) + geom_density(aes(fill = gender), alpha = 0.5) + ggtitle("Income Density Plot by Gender\nAll Respondents")+
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) + gender.palette + xlab("2012 Income")
+gender.dense1
+```
+
+A limitation of NLSY dataset is that the income distribution is top-coded. That is, the income values for the top two percent of earners have been over-written with the mean value for that group -- `r max(nlsy$income, na.rm = T)` dollars. With `r top2pct[1, 2]` men and `r top2pct[2, 2]` women falling into the top two percent, measures of "average income by gender" are less meaningful than than they would be if the dataset contained raw values. In order to understand the top two percent in the context of this analysis, the plots below show the full income distribution and the percentages of women across the income distribution, mapped by $percentile$. In the first plot, it is noticeable that the bottom quarter of the sample had no income in 2012, and there is a large jump in income from the 97th to 98th percentile, reflecting the top-coding. In the second plot, it is noticeable that beyond approximately the 80th income percentile, the percentage of women drops off sharply. Within the top two percent, there are only `r round(top2pct[2, 2]*100/(top2pct[1, 2] + top2pct[2, 2]), 0)`% women.
+
+```{r}
+#Plot by percentiles to view top coding
+#Note: Using 50 ntiles here and multiplying by 2 to make the line slightly cleaner -- this works in favor of showing the top 2 percent as clearly as possible without distraction.
+pctgender <- survey.2012 %>%
+  group_by(ntile = 2*ntile(income, 50)) %>%
+  summarize(pct_women  = sum(gender == "Female")*100/n(),
+            avg_income = mean(income))
+
+pctgender.plot2 <- ggplot(pctgender, aes(x = ntile, y = avg_income))
+pctgender.plot2 + geom_bar(stat =  "identity") +
+  xlab("Income percentile (including top-coded 2%)") +
+  ylab("Average income ($)") +
+  ggtitle("Average Income by Percentile")
+
+pctgender.plot1 <- ggplot(pctgender, aes(x = ntile, y=pct_women))
+pctgender.plot1 + geom_line(color = "#9e379f")+ 
+  xlab("Income percentile (including top-coded 2%)") + 
+  ylab("Percent women")+ 
+  ylim(0,100)+
+  coord_equal() +
+  geom_hline(yintercept = 50)+
+  ggtitle("Percent Women by Income Percentile")
+
+```
+
+**Dropping the top 2%:** All analyses below will focus on the bottom 98% of earners unless otherwise noted. This choice was made for three reasons: 
+1) This limits to only valid income data.
+2) Focusing on the bottom 98% of earners is still a meaningful target population.
+3) This allows for cleaner graphics, showing the relationship between variables that applies to the majority of the sample. For example, the density of racial groups by income is shown below. Here, the way in which the "other race" respondents out-earn both black and hispanic respondents between the $75,000 and $200,000 marks is clearer when shown without the outlying 2%.
+ 
+```{r}
+
+race.dense1 <-  ggplot(data = survey.2012, aes(x = income)) + geom_density(aes(fill = race), alpha = 0.5) + ggtitle("Income Density Plot by Race\nAll Respondents")+
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1))
+race.dense2 <-  ggplot(data = survey.notopcode, aes(x = income)) + geom_density(aes(fill = race), alpha = 0.5) + ggtitle("Income Density Plot by Race\nBottom 98%")+
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1))
+race.dense1
+race.dense2
+```
+
+
+**Bivariate Analysis of Gender and Income:**
+This t-test compares average 2012 income by gender. Since it has been limited to the bottom 98%, this difference is likely downward-biased. That is, the true difference in mean income is likely larger than the difference shown here.
+
+The bar chart below shows that there is a substantial difference in average 2012 income by gender. However, it is possible that this difference is due to a confounding demographic variable -- such as education or having children. Although it is not possible to assess every possible confounding factor (for example, the children variable is incomplete because it was only asked of women), the NLSY dataset contains many additional demographic variables that can be used as covariates. In preparation for running a regression that takes into account covariates, other demographic variables are examined below. 
+
+```{r}
+
+#This code has been commented out because it distracts from the main argument. However, it is available for future analyses.
+#Re-plot for only people in the bottom 98% with earnings > 0 
+# gap.gender.nonzero <- survey.notopcode %>%
+#   group_by(gender) %>%
+#   filter(income != 0) %>%
+#   summarize(AvgIncome  = mean(income),
+#             upper = t.test(income)$conf.int[1],
+#             lower = t.test(income)$conf.int[2])
+# 
+# # Plot, with error bars
+# gap.gender.plot.nonzero <- ggplot(data = gap.gender.nonzero, aes(x = gender, y = AvgIncome,
+#                             fill = gender)) +
+#   geom_bar(stat = "identity") +
+#   xlab("Gender") + 
+#   ylab("Average Income($)") +
+#   ggtitle("Income Gap \nSubset to Nonzero Income") + 
+#   guides(fill = FALSE) +
+#   geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+#   theme(text = element_text(size=12)) +
+#   gender.palette + ylim(0, 60000)
+# 
+
+#Summarize the people with zero income by gender.
+no.income <- survey.2012 %>%
+  group_by(gender) %>%
+  summarize(PctNoIncome = round(100*sum(income==0)/n(), 0), TotalCount = n())
+
+#Plot for bottom 98% (using dataset survey.notopcode)
+gap.gender <- survey.notopcode %>%
+  group_by(gender) %>%
+  summarize(AvgIncome  = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2])
+
+# Plot, with error bars
+gap.gender.plot <- ggplot(data = gap.gender, aes(x = gender, y = AvgIncome,
+                            fill = gender)) +
+  geom_bar(stat = "identity") +
+  xlab("Gender") + 
+  ylab("Average Income($)") +
+  ggtitle("Income Gap\nBivariate Analysis of the Target Population: the Bottom 98%") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12)) +
+  gender.palette
+gap.gender.plot
+```
+
+
+Note: expanding on the bar charts above, additional checks were run that showed that `r no.income[1,2]`% of the `r no.income[1,3]` men had zero income, while `r no.income[2,2]`% of the `r no.income[2,3]` women had zero income. That said, a sensitivity check removing respondents with no earnings from the sample did not make the wage gap disappear. Therefore, these respondents $will$ be included in all further analyses because they represent an important part of the NLSY universe. 
+
+**Step 2B: View Plots for Potential Covariates**
+
+**Covariate 1: Race**: 
+There are three race categories in this dataset: "Black", "Hispanic", and "Other". This categorization is inherently limited for a few reasons: 1) It  groups asian, Native American, mixed race, and white people 2) Respondents who are black and hispanic must be categorized as one or the other and 3) In the original data collection, respondents were also classified by the surveyer's perception. That said, even a variable with limitations can show important trends The count of each racial group in the 2012 dataset is shown below. Approximately half of the respondents were in the "other" category, followed by black respondents. The smallest group was hispanic respondents. 
+
+```{r}
+raceuni <- ggplot(survey.2012, aes(x=race, fill = race))
+raceuni + geom_bar(stat = "count") + ggtitle("Univariate Racial Breakdown") + ylab("Number of Respondents") + xlab("Race")
+```
+
+The table below shows the association between race and income. As shown by the error bars that are far from overlapping, there were substantial differences in average wages by racial group. The density plot to the right shows that a high concentration of black people were earning $0 in 2012. It also shows that people in the "other race" category were more concentrated in the $75,000 to $200,000 range than people in the black and hispanic categories were.
+
+
+```{r}
+# Plot, with error bars
+
+race.bi.conf <- survey.notopcode %>%
+  group_by(race) %>%
+  summarize(AvgIncome = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2])
+
+race.bi1 <- ggplot(data = race.bi.conf, aes(x = race, y = AvgIncome,fill = race)) +
+  geom_bar(stat = "identity") +
+  xlab("Race") + 
+  ylab("Average Income ($)") +
+  ggtitle("Bivariate Overview of \nIncome by Race: \nPart 1 - Mean Income") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12)) 
+
+race.bi2 <-  ggplot(data = survey.notopcode, aes(x = income)) + geom_density(aes(fill = race), alpha = 0.5) + ggtitle("Bivariate Overview of \nIncome by Race: \nPart 2 - Density")+
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1))
+
+
+grid.arrange(race.bi1, race.bi2, ncol = 2)
+```
+
+Finally, the table below shows income gaps by race. Acknowledgement: the code for this plot is adapted from Professor C's Lecture. 
+
+```{r}
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+gap.data.conf <- survey.notopcode %>%
+  group_by(race) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+                       lower = t.test(income ~ gender)$conf.int[2])
+
+
+# Plot, with error bars
+ggplot(data = gap.data.conf, aes(x = race, y = income.gap,
+                            fill = race)) +
+  geom_bar(stat = "identity") +
+  xlab("Race") + 
+  ylab("Income gap($)") +
+  ggtitle("Gender Gap, by Race") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12)) 
+
+```
+
+**Covariate 2: teenage poverty**:
+This binary variable measuring family poverty in 1979 is a blunt measure of childhood socioeconomic status, which is likely to affect adult earnings. Approximately 2,500 respondents did not answer this question (coded in the raw data as "invalid skip"). Given that a lack of response may indicate something about family dynamics, these values have been coded as "Unknown" rather than NA. 
+
+The univariate breakdown of teenage poverty below shows that most children were not in poverty. However, the number of respondents whose families reported meeting the poverty criteria was equal to those whose status was unknown.
+
+```{r}
+childpoverty.palette <- scale_fill_manual(values = c("#00b2d6", "#01416e", "#aaaaaa"))
+childpovertyuni <- ggplot(survey.notopcode, aes(x=childpoverty, fill = childpoverty))
+childpovertyuni + geom_bar(stat = "count") + ggtitle("Univariate teenage poverty Breakdown") + childpoverty.palette + guides(fill = F) + xlab("teenage poverty") + ylab("Count of Respondents")
+```
+
+As expected, respondents who experienced teenage poverty earned lower average wages as adults than those who were not in poverty. Additionally, the density plot below shows that a substantial proportion of those who experienced teenage poverty had zero income as adults. 
+
+```{r}
+childpoverty.bi.conf <- survey.notopcode %>%
+  group_by(childpoverty) %>%
+  summarize(AvgIncome = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2])
+
+childpoverty.bi1 <- ggplot(data = childpoverty.bi.conf, aes(x = childpoverty, y = AvgIncome,fill = childpoverty)) +
+  geom_bar(stat = "identity") +
+  xlab("childpoverty") + 
+  ylab("Average Income ($)") +
+  ggtitle("Bivariate Overview of \nIncome by teenage poverty: \nPart 1 - Means") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12)) +
+  childpoverty.palette 
+
+childpoverty.bi2 <-  ggplot(data = survey.notopcode, aes(x = income)) + geom_density(aes(fill = childpoverty), alpha = 0.5) + 
+  ggtitle("Bivariate Overview of \nIncome by teenage poverty: \nPart 2 - Density")+
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  childpoverty.palette 
+
+grid.arrange(childpoverty.bi1, childpoverty.bi2, ncol = 2)
+```
+
+There were also noticeable wage gaps by gender across poverty lines. Specifically, there was a larger difference in average wages for those who did **not** grow up in poverty than those who experienced teenage poverty (with gaps of appoximately $15,000 and $7,500 respectively).
+
+```{r}
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+childpovertygap <- survey.notopcode %>%
+  group_by(childpoverty) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+                       lower = t.test(income ~ gender)$conf.int[2])
+
+
+# Plot, with error bars
+ggplot(data = childpovertygap, aes(x = childpoverty, y = income.gap,
+                            fill = childpoverty)) +
+  geom_bar(stat = "identity") +
+  xlab("teenage poverty") + 
+  ylab("Income gap($)") +
+  ggtitle("The Gender Gap, by teenage poverty") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12)) + childpoverty.palette
+
+```
+
+**Covariate 3: Marital Status**
+One might expect that married women would earn less money than unmarried women on average because of the potential for spousal wages in a two-adult household. However, the data do not support this. As with the other covariates, the exploration of marital status below starts with a univariate analysis. Most respondents were married.
+
+Note: This data is most recently available for the year 2000. Additionally, the "unknown" values have been left in the analysis since dropping people who did not respond to a survey in 2000 could bias the analysis.
+
+```{r}
+marital.palette <- scale_fill_manual(values = c("#003300", "#c1ffc1", "#009900", "#c1cdcd"))
+maritaluni <- ggplot(survey.notopcode, aes(x=marital, fill = marital))
+maritaluni + geom_bar(stat = "count") + ggtitle("Univariate Marital Status Breakdown") + marital.palette + 
+  guides(fill = FALSE) + xlab("Marital Status in 2000") + ylab("Number of respondents")
+```
+
+Moving forward with a bivariate analysis, married people earned over $10,000 more on average in annual wages than their non-married counterparts. Additionally, the income gap between men and women was largest among married respondents. Among the unmarried respondents, the income gap was approximately $0. 
+```{r}
+marital.bi.conf <- survey.notopcode %>%
+  group_by(marital) %>%
+  summarize(AvgIncome = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2])
+
+marital.bi1 <- ggplot(data = marital.bi.conf, aes(x = marital, y = AvgIncome, fill = marital)) +
+  geom_bar(stat = "identity") +
+  xlab("Marital Status in 2000") + 
+  ylab("Average Income ($)") +
+  ggtitle("Bivariate Overview of \nIncome by Marital Status in 2000: \nPart 1 - Means") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  marital.palette
+
+marital.bi2 <-  ggplot(data = survey.notopcode, aes(x = income)) + geom_density(aes(fill = marital), alpha = 0.5) +
+  ggtitle("Bivariate Overview of Income\nby Marital Status in 2000: \nPart 2 - Density")+
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  marital.palette
+maritalbox <- ggplot(survey.notopcode, aes(x=marital, y = income, fill = gender)) + geom_boxplot() + ggtitle("Income gaps by marital status") + gender.palette +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) + xlab("Marital Status") + ylab("Income ($)")
+
+marital.violin <- ggplot(survey.notopcode, aes(x=marital, y = income, fill = gender)) + geom_violin() + ggtitle("Income Gaps by Gender and Marital Status") + gender.palette +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) + xlab("Marital Status") + ylab("Income ($)")
+
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+maritalgap <- survey.notopcode %>%
+  group_by(marital) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+                       lower = t.test(income ~ gender)$conf.int[2])
+
+
+# Plot, with error bars
+maritalgapplot <- ggplot(data = maritalgap, aes(x = marital, y = income.gap,
+                            fill = marital)) +
+  geom_bar(stat = "identity") +
+  xlab("marital") + 
+  ylab("Income gap($)") +
+  ggtitle("The Gender Gap") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  xlab("Marital Status in 2000") + 
+  ylab("Average Income ($)") +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  marital.palette + 
+  ylim(-10000, 50000)   
+
+grid.arrange(marital.bi1+  ylim(-10000, 50000), maritalgapplot, ncol = 2)
+```
+
+
+Given the pattern with married individuals both earning the most and having the largest wage gap, an additional violin plot was run to view gender differences by marital status. This showed that most of the variation was driven by married men whose wages were more evenly distributed across the income range than those of any other group. Few married men had zero income.
+
+```{r}
+marital.violin
+```
+
+Note: Although spousal wage was included in the dataset, it is excluded from this analysis due to the limitations caused by top-coding of that variable. Although limiting to the bottom 98% of earners in the respondents is easily interpretable, limiting the analysis to only people with spouses in the bottom 98% would lead to somewhat convoluted explanations of the target sample.
+
+**Covariate 4: Education:**
+The raw education variable included 20 levels, corresponding to the number of grades the respondent had completed (where 12 is graduating high school, and 16 is graduating with a bachelor's degree on a traditional timeline). There are three ways to approach the education variable:
+1) Using the raw numeric variable, indicating highest grade completed. Plugging this into a regression would result in output showing "for every additional grade completed, income increases by X dollars". This is ideal if we believe the association between education and income is linear.
+2) Using the raw data, but changing it to a factor variable. Plugging this into a regression would show how every grade relates to earnings. 
+3) Binning the educational categories into new factors. 
+
+Prior to deciding how to approach the education variable, data exploration was run, as shown below. In the univariate plot, there is a clear mode with almost half the sample ending their educational journey after graduating high school (highest grade = 12).
+
+```{r}
+highestgradeuni <- ggplot(survey.notopcode, aes(x=highestgrade, fill = I("steelblue")))
+highestgradeuni + geom_bar(stat = "count") + ggtitle("Univariate Breakdown of Respondents' Highest Grade Completed")
+```
+
+As expected, the bivariate analysis of average income by education level showed a pattern of education and income increasing together. 
+
+```{r}
+gap.data.conf <- survey.notopcode %>%
+  group_by(as.factor(highestgrade)) %>%
+  summarize(AvgIncome = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2])
+
+# Plot, with error bars
+ggplot(data = gap.data.conf, aes(x = `as.factor(highestgrade)`, y = AvgIncome, fill = I("steelblue"))) +
+  geom_bar(stat = "identity") +
+  xlab("as.factor(highestgrade)") + 
+  ylab("Average Income ($)") +
+  ggtitle("Bivariate Overview of Income by Highest Grade Completed") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12)) + xlab("Highest Grade Completed")
+```
+
+When the gender gap was assessed by education level (limiting to grades 8 and above), the gap was readily apparent at all levels except the two highest. However, a sensitivity check revealed that this was due to removing the top 2% of earners. After the check was re-run, levels 19 and 20 also showed substantial differences in earnings by gender.
+```{r}
+educationgap_notopcode <- survey.notopcode[survey.notopcode$highestgrade >=8,] %>%
+  group_by(as.factor(highestgrade)) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+            lower = t.test(income ~ gender)$conf.int[2],
+            is.significant = as.numeric(t.test(income ~ gender)$p.value < 0.05))
+
+# Plot, with error bars
+ggplot(data = educationgap_notopcode, aes(x = `as.factor(highestgrade)`, y = income.gap,fill = I("steelblue"))) +
+  geom_bar(stat = "identity") +
+  xlab("education") + 
+  ylab("Income gap($)") +
+  ggtitle("Income Gap Between Men and Women, By Education") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12))  + xlab("Highest Grade Completed")
+
+educationgap_all <- survey.2012[survey.2012$highestgrade >=8,] %>%
+  group_by(as.factor(highestgrade)) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+            lower = t.test(income ~ gender)$conf.int[2],
+            is.significant = as.numeric(t.test(income ~ gender)$p.value < 0.05))
+
+ggplot(data = educationgap_all, aes(x = `as.factor(highestgrade)`, y = income.gap,fill = I("steelblue"))) +
+  geom_bar(stat = "identity") +
+  xlab("education") + 
+  ylab("Income gap($)") +
+  ggtitle("Sensitivity Check:\nRe-run the Check Above Including the Top 2% of Earners") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12))  + xlab("Highest Grade Completed")
+```
+
+
+Following the in-depth look at education above, the variable was binned into five categories, which are shown below. The reasoning behind this was twofold:
+1) Not every grade has clear social meaning attached that is expected to translate into earnings. For example, an increase from 10th to 11th grade is very different from the increase from 15th to 16th grade, as 16th grade generally denotes a bachelor's degree, while an 11th grade student still will not have a high school diploma. 
+2) There are very few students at each grade level under high school. 
+
+The new distribution is shown below. 
+
+```{r}
+edu.bin.palette <- scale_fill_manual(values = c("#e1eaf2", "#9ab4c9", "#268ce2", "#00579f", "#072945", "#1b1e21"))
+edu.binuni <- ggplot(survey.notopcode, aes(x=edu.bin, fill = edu.bin, color = I("#072945")))
+edu.binuni + geom_bar(stat = "count") + ggtitle("Univariate Binned Education Breakdown") + edu.bin.palette +  guides(fill = FALSE) + xlab("Binned Education") + ylab("Number of Respondents")
+```
+
+
+The same bivariate analyses as above were also run for this binned education category. Again, every bin showed gendered wage gaps, and the largest wage gap was for those with a bachelor's degree. However, as shown above, this is likely biased by excluding the top two percent of earners, who are mostly men.
+
+```{r}
+edu.bin.bi.conf <- survey.notopcode %>%
+  group_by(edu.bin) %>%
+  summarize(AvgIncome = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2])
+
+edu.bin.bi1 <- ggplot(data = edu.bin.bi.conf, aes(x = edu.bin, y = AvgIncome, fill = edu.bin, color = I("#072945"))) +
+  geom_bar(stat = "identity") +
+  xlab("Binned Education") + 
+  ylab("Average Income ($)") +
+  ggtitle("Bivariate Overview of \nIncome by Binned Education") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  edu.bin.palette
+
+edu.bin.violin <- ggplot(survey.notopcode, aes(x=edu.bin, y = income, fill = gender, color = I("#072945"))) + geom_violin() + ggtitle("Income Gaps by Gender and Binned Education") + gender.palette +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) + xlab("Binned Education") + ylab("Income ($)")
+
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+edu.bingap <- survey.notopcode %>%
+  group_by(edu.bin) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+            lower = t.test(income ~ gender)$conf.int[2])
+
+
+# Plot, with error bars
+edu.bingapplot <- ggplot(data = edu.bingap, aes(x = edu.bin, y = income.gap,
+                                                fill = edu.bin, color = I("#072945"))) +
+  geom_bar(stat = "identity") +
+  ggtitle("The Gender Gap\n") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  xlab("Binned Education") + 
+  ylab("Average Income ($)") +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  edu.bin.palette + 
+  ylim(0, 70000)   
+
+
+grid.arrange(edu.bin.bi1+  ylim(0, 70000), edu.bingapplot, ncol = 2)
+```
+
+**Covariate 5: Urban vs. Rural**
+The univariate plot below shows that most respondents lived in urban areas in 2012. Very few respondents had values of NA. There is not the same type of stigma for this variable as there is for poverty, so it is unlikely that cutting out respondents who failed to answer this question will bias the sample. Therefore, these have been left as "NA" rather than creating an additional level of the factor variable called "Unknown". Using this variable in a regression will result in a slightly smaller sample.
+
+```{r}
+urban.palette <- scale_fill_manual(values = c("#dc6d14", "#d6ac51", "#009900"))
+urbanuni <- ggplot(survey.notopcode, aes(x=urban, fill = urban, color = I("grey")))
+urbanuni + geom_bar(stat = "count", na.rm = F) + ggtitle("Univariate Urban vs. Rural Breakdown") + urban.palette + 
+  guides(fill = FALSE) + xlab("Urban vs. Rural") + ylab("Number of Respondents")
+```
+
+Given the often higher cost of living in urban areas, it is surprising that urban and rural respondents had such similar salaries. Additionally, there was no discernable difference in the wage gap across respondents who lived in urban versus rural places in 2012. One explanation for this may be that this binary variable is limited in its ability to capture the true breadth of living environments.
+
+```{r}
+urban.bi.conf <- survey.notopcode %>%
+  group_by(urban) %>%
+  summarize(AvgIncome = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2])
+
+urban.bi1 <- ggplot(data = urban.bi.conf, aes(x = urban, y = AvgIncome, fill = urban, color = I("grey"))) +
+  geom_bar(stat = "identity") +
+  xlab("Urban vs. Rural") + 
+  ylab("Average Income ($)") +
+  ggtitle("Bivariate Overview of \nIncome by Urban vs. Rural") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  urban.palette
+
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+urbangap <- survey.notopcode %>%
+  group_by(urban) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+            lower = t.test(income ~ gender)$conf.int[2])
+
+
+# Plot, with error bars
+urbangapplot <- ggplot(data = urbangap, aes(x = urban, y = income.gap,
+                                          fill = urban, color = I("grey"))) +
+  geom_bar(stat = "identity") +
+  ggtitle("The Gender Gap\n") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  xlab("Urban vs. Rural") + 
+  ylab("Average Income ($)") +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  urban.palette + 
+  ylim(0, 50000)   
+
+grid.arrange(urban.bi1+  ylim(0, 50000), urbangapplot, ncol = 2)
+```
+
+
+**Covariate 6: Industry**
+Looking beyond the demographic covariates above, some might argue that women simply choose lower paying industries. In order to explore this argument, the main regression will be run both with and without the "industry" variable. An exploration of the industry variable is shown below.
+
+This univariate plot shows that the most common industry category for respondents is Health Care & Social Assistance. 
+
+```{r}
+industry.bi.conf <- survey.notopcode %>%
+  group_by(industry) %>%
+  summarize(AvgIncome = mean(income),
+            upper = t.test(income)$conf.int[1],
+            lower = t.test(income)$conf.int[2], count = n())
+
+industry.bi.conf <- mutate(industry.bi.conf,
+                           industry = reorder(industry, count))
+
+industryuni <- ggplot(industry.bi.conf, aes(x=industry, y = count, fill = industry))
+industryuni + geom_bar(stat = "identity") + ggtitle("Univariate Industry Breakdown - Ordered by Count of Respondents") + 
+  guides(fill = FALSE) + xlab("Industry") + ylab("Number of Respondents")+
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))
+
+```
+
+In order to maintain consistency, the plots below are also ordered by frequency of industry. In the first bivariate chart, we see that Information, Finance/Insurance, and Professional/Science/Tech sectors make the highest wages. People in food services and other aspects of the service industry make the lowest wages, as expected. As a matter of data consistency, it is worth noting that some of those coded as "valid skip" had nonzero income. A full table showing the count of people with zero income per industry is shown in the data cleaning section appendix. 
+
+Regarding gender gaps, the largest gaps are in the industries that are also the highest pay gaps: Finance/Insurance, and Professional/Science/Tech. Some industries such as real estate and Entertainment/Recreation have undiscernable wage gaps. Construction also has an undiscernable wage gap.
+
+```{r}
+industry.bi1 <- ggplot(data = industry.bi.conf, aes(x = industry, y = AvgIncome, fill = industry)) +
+  geom_bar(stat = "identity") +
+  xlab("Industry") + 
+  ylab("Average Income ($)") +
+  ggtitle("Bivariate Overview of Income by Industry") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text =element_text(size=12), axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))
+
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+industrygap <- survey.notopcode %>%
+  group_by(industry) %>%
+  summarize(income.gap = mean(income[gender == "Male"], na.rm = TRUE) -
+              mean(income[gender == "Female"], na.rm = TRUE),
+            upper = t.test(income ~ gender)$conf.int[1],
+            lower = t.test(income ~ gender)$conf.int[2], count = n())
+
+#Re-order to match the plots above
+industrygap <- mutate(industrygap,
+                           industry = reorder(industry, count))
+
+# Plot, with error bars
+industrygapplot <- ggplot(data = industrygap, aes(x = industry, y = income.gap,
+                                          fill = industry)) +
+  geom_bar(stat = "identity") +
+  ggtitle("The Gender Gap by Industry") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  xlab("Industry") + 
+  ylab("Average Income ($)") +
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))
+
+industry.bi1
+industrygapplot
+```
+
+
+##### **Step 4: Regression:**
+After investigating the demographic characteristics above, a linear regression was run to re-assess the gender wage gap while accounting for other demographic characteristics, including race, teenage poverty, marital status, education, and urban/rural living environment. This allowed for isolating the differences by gender while accounting for other factors. The output is shown below. In this regression, industry has been excluded in order to only look at demographic characteristics. Note: as with all covariate analyses above, it is restricted to the bottom 98% of earners.
+
+``` {r}
+regression <- lm(income ~ gender + race + marital + edu.bin + childpoverty + urban, data = survey.notopcode)
+kable(summary(regression)$coefficients, digits = c(0, 2, 2, 4))
+
+sensitivity.topcode <- lm(income ~ gender + race + marital + edu.bin + childpoverty + urban, data = survey.2012)
+
+sensitivity.industry <- lm(income ~ gender + race + marital + edu.bin + childpoverty + urban + industry, data = survey.notopcode)
+
+sensitivity.interaction <- lm(income ~ gender*race + marital + edu.bin + childpoverty + urban, data = survey.notopcode)
+testintersection<-anova(regression, sensitivity.interaction)
+
+```
+
+All outcome coefficients in the model are significant at the p = 0.05 level with the exception of comparing Hispanic and Other-Race respondents. Therefore, we can interpret the following:
+
+**Gender**: Gender is extremely meaningful in predicting wages. Holding race, marital status, education, child poverty, and urban/rural environment constant, women earn an average of `r round(-summary(regression)$coefficients[2,1],0)` less than men. 
+
+**Race**: Holding gender, marital status, education, child poverty, and urban/rural environment constant, Hispanic people earn an average of `r round(-summary(regression)$coefficients[3,1],0)` dollars less than their non-black/non-hispanic counterparts, and Black people earn an average of `r round(-summary(regression)$coefficients[4,1],0)` dollars less than their non-black/non-hispanic counterparts. However, with a p-value of `r summary(regression)$coefficients[3,4]`, we do not have evidence to reject the null hypothesis that Hispanic people earn the same average wages as non-black/non-hispanic (aka "other") people. 
+
+**Marital Status**: Holding gender, race, education, childhood poverty, and urban/rural environment constant, married people earn an average of `r round(-summary(regression)$coefficients[5,1], 0)` dollars more than  people who were unmarried in 2000, `r round(-summary(regression)$coefficients[6,1], 0)` dollars more than people whose marital status was "other" (for example divorced or widowed), and `r round(-summary(regression)$coefficients[7,1], 0)` dollars more than people whose marital status was unknown.
+
+**Education**: Education is associated with tremendous gains in income. With a base group of those who have an education level lower than high school, we find that people with the same gender, race, marital status, child poverty, and urban/rural living environment have wages of an average of `r round(summary(regression)$coefficients[8,1], 0)` more dollars per year after receiving a high school diploma. Those with some college earn an average of `r round(summary(regression)$coefficients[9,1],0)` dollars more per year than their counterparts without high school diplomas. However, the largest gains are for people with bachelor's and graduate degrees, with dollar increases of `r round(summary(regression)$coefficients[10,1],0)` and `r round(summary(regression)$coefficients[11,1],0)` respectively.
+
+**Child poverty**: As expected, people who experienced poverty as teenagers had lower average adult wages than those with the same gender/race/marital/education/living characteristics who did not experience childhood poverty. The average difference in income across these groups was `r round(-summary(regression)$coefficients[12,1],0)` dollars. Those with an unknown poverty status also had an average decrease of `r round(-summary(regression)$coefficients[13,1],0)` dollars, as compared to their counterparts who definitively were not in poverty in 1979.
+
+**Urban/Rural Living Environment**: The difference in income based on urban/rural living environment was significant yet small in magnitude. Holding all else constant, people living in a rural environment earned an average of `r round(-summary(regression)$coefficients[14,1],0)` less per year than their urban counterparts. 
+
+**Comparison to Bivariate results of Income/Gender**
+Comparing to the t-test that was run at the start of this project without covariates, we see that the gender gap has changed from `r round(gap.gender[1,2]-gap.gender[2,2],0)` without covariates to `r round(-regression$coefficients[2], 0)` after these covariates were accounted for. This means that holding all else constant, women in the sample earned an average of `r round(-regression$coefficients[2], 0)` dollars less than men. Essentially, none of these covariates explained away the wage gap. Rather, accounting for demographic characteristics has $increased$ the size of the gap that can be attributed to gender. 
+
+Beyond this main regression, a few additional sensitivity checks were run:
+
+**1) Top Coding:** The regression above was re-run including the top-coded earners. The results from this check showed that the gender coefficient changed from `r round(-regression$coefficients[2],0)` to `r round(-sensitivity.topcode$coefficients[2],0)`. While it is impossible to guage without the raw data whether this change of approximately `r round(abs(regression$coefficients[2] - sensitivity.topcode$coefficients[2]),-3)` is an accurate figure, we can infer that the current estimate, which focuses on the bottom 98%, is downward-biased.
+
+**2) Including Industry:** When an 18-level variable for industry was included in the model, the gender coefficient changed from `r round(-regression$coefficients[2],0)` to `r round( -sensitivity.industry$coefficients[2],0)`. Therefore, while holding industry constant decreased the wage gap, it still did not eliminate it.
+
+**3) Intersectionality:** There is substantial theory supporting the perspective that women of different races experience gender discrimination differently. A regression accounting for this showed that women from the "Other Race" category earned an average of `r round(summary(sensitivity.interaction)$coefficients[2,1])` less than men with identical characteristics. In contrast, women from the Hispanic category earned an average of `r round(summary(sensitivity.interaction)$coefficients[2,1]) - round(summary(sensitivity.interaction)$coefficients[3,1])` less than men with identical characteristics, and women from the black cateogry earned an average of `r round(summary(sensitivity.interaction)$coefficients[2,1]) - round(summary(sensitivity.interaction)$coefficients[4,1])` less than men with identical characteristics. An ANOVA assessing the significance of the interaction term showed a p-value of less than 0.001. Essentially, adding race as a covariate changed the relationship between gender and income. This is in line with the bar charts in the "race" covariate section above. 
+
+The new regression is displayed in full below. As expected when changing the regression model in any way, values for all covariates have changed. However, all the trends for marital status, education, child poverty, and urban/rural location have stayed constant. One other notable difference between the two models is in the P-values. The coefficient for Hispanic is now significant, and unknown child poverty status now has a p-value just above 0.05, so it is technically not significant. That said, the Hispanic coefficient is now specific to Hispanic men when interpreted in isolation. Additionally, these changes to P-values (along with the small changes in coefficient estimates) do not change the overall takeaways of the regresion. Therefore, the only important parts of this output to pay attention to are the gender and race coefficients (in addition to the interaction terms such as "genderFemale:raceHispanic").
+
+``` {r}
+kable(summary(sensitivity.interaction)$coefficients, digits = c(0, 2, 2, 4))
+```
+
+
+#### **Step 5: Plot diagnostics**
+The plots below show that a linear regression was $not$ the correct model for these data. 
+
+In the plot of residuals versus fitted values, we see that the absolute value of residuals gets further away from the 0 mark as the fitted values increase. Additionally, there is a hard black line sloping downwards on that plot showing that the residuals are are stopping at different points (likely because income cannot be negative). This is not what we expect. When a linear model is correct, residuals should have constant variance, and the residuals and fitted values should be uncorrelated.
+
+
+Additionally, the Q-Q plot shows that these data were not normal. This makes sense, given the shape of the income distribution shown in the initial density plot. Based on the non-normal data, we can still use a linear model for prediction, but the p-values from the regression are not believable. This invalidates the analysis above explaining that all values except the comparison of Hispanic and Other race were significant and therefore were unlikely to have happened by chance.
+
+For the scale-location plot, there should be no discernable trends. In the plot below, we see a black line sloping upwards.
+
+Finally, for the residuals versus levarege plot, we fortunately do not see any values outside of Cook's Distance, and the red line showing the pattern is fortunately flat. 
+
+Note: All sensitivity regressions mentioned above also failed to pass the checks provided by these plots.
+
+```{r}
+plot(sensitivity.interaction)
+
+```
+
+
+#### **Step 6: Discussion**
+**Main findings:** This analysis shows that there is a substantial gap in average income for men and women, and it does not disappear when other demographic or industry factors are accounted for. Additionally, we see in this analysis that black people on average earn lower wages than other non-hispanic groups. We also see that education is positively associated with earnings, as expected. Marital status is positvely associated with earnings (which is driven by the high earnings of married men), and living in rural areas and growing up in poverty are negatively associated with earnings.
+
+**Limitations:** The strength of this analysis is that contains both childhood and adult demographic factors for thousands of people. However, there are also many limitations:
+1) There may be bias induced by missing income data. This includes people who didn't respond and the top two percent of earners whose values were overwritten. Even seeking to generalize to others in the 98% of people with lowest income (our target population) may be imperfect.
+2) These demographic variables cannot capture the full human experince. Gender is not truly a binary, and race cannot be categorized into three neat categories.
+3) The number of variables included in this analysis is limited.
+4) The actual income distribution is not normal, and a linear regression is not the correct model for this analysis.
+5) The dataset is limited to people who were teenagers in 1979 and successfully recruited for this analysis.
+Finally, it is important to note that this analysis makes no claims of allowing for $causal$ inference. 
+
+**Level of confidence**
+Based on the plotting statistics, I am not confident in the results of this regression. The P-values reported here cannot be understood to be meaningful because the base assumptions for a linear regression were not met. However, univariate and bivariate plots of various demographic characteristics, paired with the plots showing the wage gap across different demographic characteristics are still meaningful summaries of this group's data.
+
+#### **Appendix: Data Cleaning **
+
+
+``` {r}
+gendercleaning <- survey.2012 %>%
+  count(gender, orig_gender)
+racecleaning <- survey.2012 %>%
+  count(race, orig_race)
+urbancleaning <- survey.2012 %>%
+  count(fct_explicit_na(urban), orig_urban)
+childpovertycleaning <- survey.2012 %>%
+  count(childpoverty, orig_childpoverty)
+maritalcleaning <- survey.2012 %>%
+  count(marital, orig_marital)
+incomecleaning <- nlsy %>% 
+  filter(orig_income < 0) %>%
+  count(income, orig_income)
+top2pctcleaning <- survey.2012 %>%
+  group_by(top2pct) %>%
+  summarize(min.income = min(income), max.income = max(income), n = n())
+industrycleaning <- nlsy %>%
+  group_by(industry) %>%
+  summarize(min.code = min(orig_industry), max.code = max(orig_industry), n.ZeroIncome = sum(orig_income==0), n = n())
+edubinning <- survey.2012 %>%
+  count(edu.bin, highestgrade)
+```
+
+**Income**: This check is filtered to show only the values that were originally negative. Note: This check draws from the original NLSY dataset. All other checks draw from the dataset that was limited to people who had non-missing 2012 income.
+
+```{r}
+kable(incomecleaning)
+```
+
+**Gender**: This check shows how the gender variable was ordered and labeled.
+```{r}
+kable(gendercleaning)
+```
+
+**Race**: This check shows how the race variable was ordered and labeled.
+```{r}
+kable(racecleaning)
+```
+
+**Urban**: This check shows how the urban/rural variable was coded with urban as the default
+```{r}
+kable(urbancleaning)
+```
+
+**teenage poverty**: this check shows how values of missing were changed to "unknown", since -3 indicates invalid skip (see above for full explanation).
+```{r}
+kable(childpovertycleaning)
+```
+
+**Marital Status**: This check shows the coding of the marital status variable. An important limitation is that this was only included in the dataset for the year 2000, so it was out of date by 2012 for some respondents.
+```{r}
+kable(maritalcleaning)
+```
+
+**Top 2 percent**: This check shows the binary variable that was created to mark the top 2 percent of earners
+```{r}
+kable(top2pctcleaning)
+```
+
+**Industry**: This check shows how industries were binned. This drew from the NLSY documentation, and small categories were also grouped together.
+```{r}
+kable(industrycleaning)
+```
+
+
+**Education bins**: This check shows how the education levels were binned.
+```{r}
+kable(edubinning)
+```
