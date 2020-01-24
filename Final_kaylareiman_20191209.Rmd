@@ -4,6 +4,7 @@ author: "Kayla Reiman"
 date: "12/9/2019"
 output: html_document
 ---
+#Testing Git desktop
 ### **Research prompt**: Is there a significant difference in income between men and women? Does the difference vary depending on other factors (e.g., education, marital status, criminal history, drug use, childhood household factors, profession, etc.)?
 
 **Hypothesis and process**: I expect to see income differences by gender, and I also expect income to differ based on race, teenage poverty, marital status, and education levels. I do not expect that adding a covariate for industry will fix these disparities. 
