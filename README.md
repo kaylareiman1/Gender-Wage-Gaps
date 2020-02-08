@@ -9,4 +9,4 @@ I created this R Markdown file as a final project for a CMU course called R for 
 5. A discussion
 
 
-Note: The assignment's full instructions are avaialable here: http://www.andrew.cmu.edu/user/achoulde/94842/final_project/Final_Project.html. 
+Note: The assignment's full instructions are available here: http://www.andrew.cmu.edu/user/achoulde/94842/final_project/Final_Project.html. 
