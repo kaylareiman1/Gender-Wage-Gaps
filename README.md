@@ -1,3 +1,4 @@
+# Gender Wage Gap: R Project
 I created this R Markdown file as a final project for a CMU course called R for Analytics in Fall 2019. For this project, I used data from the National Longitudinal Survey of Youth to investigate the research question: is there a significant difference in income between men and women? This file contains the following components:
 
 1. Data cleaning
