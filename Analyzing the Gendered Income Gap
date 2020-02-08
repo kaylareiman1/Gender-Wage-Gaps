@@ -5,12 +5,22 @@ subtitle: "CMU Course: R for Analytics with Professor Alexandra Chouldechova"
 date: "Completed December 2019; Updated January 2020"
 output: html_document
 ---
-#### **Research prompt**: 
-#### Is there a significant difference in income between men and women? Does the difference vary depending on other factors (e.g., education, marital status, criminal history, drug use, childhood household factors, profession, etc.)?
+   
+  
+**Overview**: This is the final project for the Carnegie Mellon course, R for Analytics and investigates the wage gap between men and women. The assignment required producing plots along and writing a linear regression and interpreting it.     
+This file contains the following components:  
+1. Data cleaning  
+2. Bivariate analysis of income based and gender  
+3. Analysis of other demographic characteristics such as race and teenage poverty and their relationship to both income 4. and the gender-income gap  
+4. A linear regression, accompanied by sensitivity tests  
+5. Diagnostic plots  
+6. A discussion
 
-**Hypothesis and process**: I expect to see income differences by gender, and I also expect income to differ based on race, teenage poverty, marital status, and education levels. I do not expect that adding a covariate for industry will fix these disparities. 
+**Full research prompt**: Is there a significant difference in income between men and women? Does the difference vary depending on other factors (e.g., education, marital status, criminal history, drug use, childhood household factors, profession, etc.)?
 
-**Acknowledgement**: Thank you to classmates Erika Montana and Betty Liu for informing my conceptual work on this project.
+**Hypothesis and process**: I expect to see income differences by gender, and I also expect income to differ based on race, teenage poverty, marital status, and education levels. 
+
+**Summary of results**: Although the data were not suited to a linear regression, the plots below show compelling evidence of a wage gap between men and women. The plots also show that this gap covaries with demographic characteristics such as race, education, and marital status.
 
 ```{r global_options, include=FALSE}
 #This code chunk sets up the HTML output to not show code by default.  
@@ -200,7 +210,6 @@ pctgender.plot1 + geom_line(color = "red3")+
 1) This limits to only valid income data.  
 2) Focusing on the bottom 98% of earners is still a meaningful target population.  
 
-
 **Bivariate Analysis of Gender and Income:**
 The plot below compares average 2012 income by gender. Since the top two percent of earners (disproportionately men) are excluded, this difference is likely downward-biased. That is, the true difference in mean income between men and women is likely larger than the wage gap shown here.
 
@@ -269,17 +278,17 @@ Each demographic variable below will be examined in three ways:
 
 2) A **bivariate analysis** will show how income varies across categories (ex. what is the average income for people who experienced teen poverty?). The y axis will show income levels.
 
-3) A **wage gap analysis**  will show how the *difference in income between men and women* varies across categories (ex. what is the wage gap for people who experienced teen poverty?). Similar to the bivariate analysis, the y axis will show income levels.
+3) A **wage gap analysis**  will show how the *difference in income between men and women* varies across categories (ex. what is the wage gap for people who experienced teen poverty?). The y axis will show average income differences.
 
-**Covariate 1: Race**:   
-There are three race categories in this dataset: "Black", "Hispanic", and "Other". This categorization is inherently limited for a few reasons: 
-1) It groups asian, Native American, mixed race, and white people 
-2) Respondents who are black and hispanic must be categorized as one or the other and 
-3) In the original data collection, respondents were also classified by the surveyor’s perception. That said, even a variable with limitations can show important trends. The count of people in each racial group in the 2012 dataset is shown below. Approximately half of the respondents were in the "other" category, followed by black respondents. The smallest group was hispanic respondents. 
+**Covariate 1: Race**
+There are three race categories in this dataset: "Black", "Hispanic", and "Other". This categorization is inherently limited for a few reasons:   
+1) It groups asian, Native American, mixed race, and white people   
+2) Respondents who are black and hispanic must be categorized as one or the other and   
+3) In the original data collection, respondents were also classified by the surveyor’s perception. That said, even a variable with limitations can show important trends. The count of people in each racial group in target population is shown below. Approximately half of the respondents were in the "other" category, followed by black respondents. The smallest group was hispanic respondents. 
 
 ```{r}
 #Create univariate plot for race
-raceuni <- ggplot(survey.2012, aes(x=race, fill = I("mediumpurple")))
+raceuni <- ggplot(survey.notopcode, aes(x=race, fill = I("mediumpurple")))
 raceuni + 
   geom_bar(stat = "count") + 
   ggtitle("Univariate Racial Breakdown") + 
@@ -287,7 +296,7 @@ raceuni +
   xlab("Race")
 ```
 
-Below, the bivariate and wage gap analyses show income information for each racial group. The table on the left below shows the association between race and income. As shown by the error bars that are far from overlapping, there were substantial differences in average wages by racial group. The plot on the right shows differences in pay gaps by race. demonstrating that although people in the "other" category earn an average of $40,000, men and women within this group receive vastly different average wages -- with a wage gap of approximately $20,000. Black respondents earned the least money overall and also had the smallest wealth gap, with a difference between men's and women's earnings of only approximately $5,000.
+Below, the bivariate and wage gap analyses show income information for each racial group. The table on the left below shows the association between race and income. As shown by the error bars that are far from overlapping, there were substantial differences in average wages by racial group. The plot on the right shows differences in pay gaps by race. demonstrating that although people in the "other" category earn an average of $40,000, men and women within this group receive vastly different average wages -- with an average wage gap of approximately $20,000. Black respondents earned the least money overall and also had the smallest wealth gap, with a difference between men's and women's earnings of  approximately $5,000.
 
 
 ```{r}
@@ -329,11 +338,12 @@ racegapplot <- ggplot(data = racegap, aes(x = race, y = income.gap, fill = I("me
   theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1))+
   ylim(-10000, 50000)   
 
+#Arrange side-by-side so that the average and associated gaps are clear.
 grid.arrange(race.bi +  ylim(-10000, 50000), racegapplot, ncol = 2)
 ```
 
 **Covariate 2: teenage poverty**:  
-This binary variable measuring family poverty in 1979 is a blunt measure of childhood socioeconomic status, which is likely to affect adult earnings. Approximately 2,500 respondents did not answer this question (coded in the raw data as "invalid skip"). Given that a lack of response may indicate something about family dynamics, these values have been coded as "Unknown" rather than NA and are colored in grey to be easily differentiable from other values in purple.
+This binary variable measuring family poverty in 1979 is a blunt measure of childhood socioeconomic status, which is likely to affect adult earnings. Approximately 2,500 respondents did not answer this question (coded in the raw data as "invalid skip"). Given that a lack of response may indicate something about family dynamics, these values have been coded as "Unknown" rather than NA and are colored in grey to be easily differentiable from response values in purple.
 
 The univariate breakdown of teenage poverty below shows that most teens in the sample were not in poverty. However, the number of respondents whose families reported meeting the poverty criteria was equal to those whose status was unknown.
 
@@ -408,7 +418,6 @@ One might expect that married women would earn less money than unmarried women o
 Note: The marital data were last collected in 2000. The "unknown" values (in grey below) have been left in the analysis since dropping people who did not respond to a survey in 2000 could bias the analysis.
 
 ```{r}
-#Create marital palette w/ shades of green
 marital.palette <- scale_fill_manual(values = c("mediumpurple", "mediumpurple", "mediumpurple", "#c1cdcd"))
 
 #Create base plot for marital status
@@ -479,13 +488,13 @@ grid.arrange(marital.bi+  ylim(-10000, 50000), maritalgapplot, ncol = 2)
 ```
 
 
-Given the odd pattern with married individuals both earning the most and having the largest wage gap in contrast to any other group, an additional box plot was run to view gender differences by marital status. This showed that the variation was driven by married men who earned substantially higher wages than any other group. As shown in the box plot, the difference was extreme; married men earning in the 50th percentile received higher wages than people at the 75th percentile in almost every other group.
+Given the odd pattern with married individuals both earning the most and having the largest wage gap in contrast to any other group, an additional box plot was run to view gender differences by marital status. This showed that the results above were driven by married men who earned substantially higher wages than any other group. As shown in the box plot, the difference was extreme; married men earning in the 50th percentile received higher wages than people at the 75th percentile in almost every other group.
 
 ```{r}
 maritalbox
 ```
 
-Note: Although spousal wage was included in the dataset, it is excluded from this analysis due to the limitations caused by top-coding of that variable. Although limiting to the bottom 98% of earners in the respondents is easily interpretable, limiting the analysis to only people with spouses in the bottom 98% would lead to somewhat convoluted explanations of the target sample.
+Note: Although spousal wage was included in the dataset, it is excluded from this analysis due to the limitations caused by top-coding of that variable. Although limiting to the bottom 98% of earners in the respondents is easily interpretable, limiting the analysis to only people with spouses in the bottom 98% would lead to convoluted explanations of the target sample.
 
 **Covariate 4: Education:**  
 The raw education variable included 20 levels, corresponding to the number of grades the respondent had completed (where 12 is graduating high school, and 16 is graduating with a bachelor's degree on a traditional timeline). There are three ways to approach the education variable:  
@@ -593,7 +602,7 @@ edu.bin.bi <- ggplot(data = edu.bin.bi.conf, aes(x = edu.bin, y = AvgIncome, fil
   geom_bar(stat = "identity") +
   xlab("Binned Education ") + 
   ylab("Average Income ($)") +
-  ggtitle("Bivariate Overview \nIncome by Binned Education") + 
+  ggtitle("Bivariate Overview \nIncome by \nBinned Education") + 
   guides(fill = FALSE) +
   geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
   theme(text = element_text(size=12), axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) 
@@ -611,7 +620,7 @@ edu.bingap <- survey.notopcode %>%
 # Plot, with error bars
 edu.bingapplot <- ggplot(data = edu.bingap, aes(x = edu.bin, y = income.gap, fill = I("mediumpurple"))) +
   geom_bar(stat = "identity") +
-  ggtitle("Gender Analysis\nIncome Gap by Binned Education") + 
+  ggtitle("Gender Analysis\nIncome Gap by \nBinned Education") + 
   guides(fill = FALSE) +
   geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
   xlab("Binned Education ") + 
@@ -623,7 +632,7 @@ grid.arrange(edu.bin.bi+  ylim(-10000, 70000), edu.bingapplot, ncol = 2)
 ```
 
 **Covariate 5: Urban vs. Rural**  
-The univariate plot below shows that most respondents lived in urban areas in 2012. Very few respondents had values of NA. There is not the same type of stigma for this variable as there is for poverty, so it is unlikely that cutting out respondents who failed to answer this question will bias the sample. Therefore, these have been left as "NA" rather than creating an additional level of the factor variable called "Unknown". Using this variable in a regression will result in a slightly smaller sample.
+The univariate plot below shows that most respondents lived in urban areas in 2012. Very few respondents had values of NA. There is not the same type of stigma for this variable as there is for poverty, so it is unlikely that cutting out respondents who failed to answer this question will bias the sample. Therefore, these have been left as "NA" rather than creating an additional level of the factor variable called "Unknown". Using this variable in a regression will result in a slightly smaller sample because respondents with  NA values will be dropped.
 
 ```{r}
 urban.palette <- scale_fill_manual(values = c("mediumpurple", "mediumpurple", "#009900"))
@@ -710,7 +719,7 @@ industryuni +
 
 ```
 
-In order to maintain consistency, the plots below are also ordered by frequency of industry. In the first bivariate chart, we see that people in the Information, Finance/Insurance, and Professional/Science/Tech sectors earn the highest wages. People in food services and other aspects of the service industry make the lowest wages, as expected. As a matter of data consistency, it is worth noting that some of those coded as "valid skip" had nonzero income, so the interpretation of industry findings is unclear. A full table showing the count of people with zero income per industry is shown in the data cleaning section appendix. 
+In order to maintain consistency, the plots below are also ordered by frequency of industry. In the first bivariate chart, we see that people in the Information, Finance/Insurance, and Professional/Science/Tech sectors earn the highest wages. People in food services and other parts of the service industry make the lowest wages, as expected. As a matter of data consistency, it is worth noting that some of those coded as "valid skip" had nonzero income, so the interpretation of industry findings is unclear. A full table showing the count of people with zero income per industry is shown in the data cleaning appendix. 
 
 Regarding gender gaps, the largest gaps are in the industries that are also the highest pay gaps: Finance/Insurance, and Professional/Science/Tech. Some industries such as real estate and Entertainment/Recreation have indiscernible wage gaps. Construction also has an undiscernable wage gap.
 
@@ -754,7 +763,7 @@ industrygapplot
 
 
 ##### **Part 4: Regression**
-After investigating the demographic characteristics above, a linear regression was run to re-assess the gender wage gap while accounting for other demographic characteristics, including race, , marital status, education, and urban/rural living environment. This allowed for isolating the differences by gender while accounting for other factors. The output is shown below. In this regression, industry has been excluded in order to only look at demographic characteristics. As with all analyses above, it is restricted to the bottom 98% of earners.
+After investigating the demographic characteristics above, a linear regression was run to re-assess the gender wage gap while accounting for other demographic characteristics, including race, teenage poverty, marital status, education, and urban/rural living environment. This allowed for isolating the differences by gender while accounting for other factors. The output is shown below. In this regression, industry has been excluded in order to only look at demographic characteristics. As with all analyses above, it is restricted to the bottom 98% of earners.
 
 ``` {r}
 regression <- lm(income ~ gender + race + marital + edu.bin + childpoverty + urban, data = survey.notopcode)
@@ -792,7 +801,7 @@ Beyond this main regression, a few additional sensitivity checks were run:
 
 **2) Including Industry:** When the 18-level variable for industry was included in the model, the gender coefficient changed from `r round(-regression$coefficients[2],0)` to `r round( -sensitivity.industry$coefficients[2],0)`. Therefore, while holding industry constant decreased the wage gap, it still did not eliminate it.
 
-**3) Intersectionality:** There is substantial theory supporting the perspective that women of different races experience gender discrimination differently. A regression accounting for this showed that women from the "Other Race" category earned an average of `r round(-summary(sensitivity.interaction)$coefficients[2,1])` less than men with identical characteristics. In contrast, women from the Hispanic category earned an average of `r round(-summary(sensitivity.interaction)$coefficients[2,1]) + round(summary(sensitivity.interaction)$coefficients[3,1])` less than men with identical characteristics, and women from the black category earned an average of `r round(-summary(sensitivity.interaction)$coefficients[2,1]) + round(summary(sensitivity.interaction)$coefficients[4,1])` less than men with identical characteristics. An ANOVA assessing the significance of the interaction term showed a p-value of less than 0.001. Essentially, adding race as a covariate changed the relationship between gender and income. This is in line with the bar charts in the "race" covariate section above. 
+**3) Intersectionality:** There is substantial theory and evidence that women of different races experience gender discrimination differently. A regression accounting for this showed that women from the "Other Race" category earned an average of `r round(-summary(sensitivity.interaction)$coefficients[2,1])` less than men with identical characteristics. In contrast, women from the Hispanic category earned an average of `r round(-summary(sensitivity.interaction)$coefficients[2,1]) + round(summary(sensitivity.interaction)$coefficients[3,1])` less than men with identical characteristics, and women from the black category earned an average of `r round(-summary(sensitivity.interaction)$coefficients[2,1]) + round(summary(sensitivity.interaction)$coefficients[4,1])` less than men with identical characteristics. An ANOVA assessing the significance of the interaction term showed a p-value of less than 0.001. Essentially, adding race as a covariate changed the relationship between gender and income. This is in line with the bar charts in the "race" covariate section above. 
 
 The new regression is displayed in full below. As expected when changing the regression model in any way, values for all covariates have changed. However, all the trends for marital status, education, child poverty, and urban/rural location have stayed constant. One other notable difference between the two models is in the P-values. The coefficient for Hispanic is now significant, and unknown child poverty status now has a p-value just above 0.05, so it is technically not significant. That said, the Hispanic coefficient is now specific to Hispanic men when interpreted in isolation. Additionally, these changes to P-values (along with the small changes in coefficient estimates) do not change the overall takeaways of the regression. Therefore, the only important parts of this output to pay attention to are the gender and race coefficients (in addition to the interaction terms such as "genderFemale:raceHispanic").
 
@@ -815,6 +824,8 @@ Finally, for the residuals versus leverage plot, we fortunately do not see any v
 
 Note: All sensitivity regressions mentioned above also failed to pass the checks provided by these plots.
 
+These plots essentially indicate that although the regression above can be interpreted as a model to predict income, no estimates of statistical significance are valid.
+
 ```{r}
 plot(sensitivity.interaction)
 
@@ -824,7 +835,7 @@ plot(sensitivity.interaction)
 #### **Part 6: Discussion**
 **Main findings:** This analysis shows that there is a substantial gap in average income for men and women, and it does not disappear when other demographic or industry factors are accounted for. Additionally, we see in this analysis that black people on average earn lower wages than other non-hispanic groups. We also see that education is positively associated with earnings, as expected. Marital status is positively associated with earnings (which is driven by the high earnings of married men), and living in rural areas and growing up in poverty are negatively associated with earnings.
 
-**Limitations:** The strength of this analysis is that contains both childhood and adult demographic factors for thousands of people. However, there are also many limitations:
+**Limitations:** The strength of this analysis is that contains both childhood and adult demographic factors for thousands of people. However, there are also many limitations:  
 1) There may be bias induced by missing income data. This includes people who didn't respond and the top two percent of earners whose values were overwritten. Even seeking to generalize to others in the 98% of people with lowest income (our target population) may be imperfect.  
 2) These demographic variables cannot capture the full human experience. Gender is not truly a binary, and race cannot be categorized into three neat categories.  
 3) The number of variables included in this analysis is limited.  
@@ -832,19 +843,17 @@ plot(sensitivity.interaction)
 5) The dataset is limited to people who were teenagers in 1979 and successfully recruited for this analysis.  
 Finally, it is important to note that this analysis makes no claims of allowing for $causal$ inference. 
 
-**Level of confidence**
-Based on the plotting statistics, I am not confident in the results of this regression. The P-values reported here cannot be understood to be meaningful because the base assumptions for a linear regression were not met. However, univariate and bivariate plots of various demographic characteristics, paired with the plots showing the wage gap across different demographic characteristics are still meaningful summaries of this group's data.
+**Level of confidence:**
+Based on the plotting statistics, I am not confident in the results of this regression. The P-values reported here cannot be understood to be meaningful because the base assumptions for a linear regression were not met. However, although this product did not produce a valid linear regression, the plots created above are still valid characterizations of the data. There is compelling evidence of a wage gap between men and women, and this gap covaries with demographic characteristics such as race, education, and marital status.
 
-**Next steps**
-Future analyses could investigate the following:  
-1)**Log income**: Given the skewed distribution of income, replacing the independent variable with ln(income) could produce better regression results. However, given that ln(0) is undefined and approximately a quarter of the sample has zero income, this would fundamentally alter the analysis.  
-2)**Literature review**: The covariates chosen for this analysis were based on intuition and generally held knowledge. However, a superior analysis would choose covariates based on a literature review.  
+**Next steps:** Future analyses could investigate the following:  
+1)**Log income**: Given the skewed distribution of income, replacing the independent variable with ln(income) could produce better regression results. However, given that ln(0) is undefined and approximately a quarter of the sample has zero income, this would fundamentally alter the analysis. Additionally, preliminary analyses of ln(income) also did not show a normal distribution.  
+2)**Literature review**: The covariates chosen for this analysis were based on the author's opinions. However, a superior analysis would choose covariates based on a literature review.  
 
-**Strengths**  
-Although this product did not produce a valid linear regression, the plots created above are still valid characterizations of the data. There is compelling evidence of a wage gap between men and women, and this gap covaries with demographic characteristics such as race, education, and marital status.
 
 ### **Appendix: Data Cleaning **
-
+This appendix shows original and final values for each variable that was recoded.
+  
 
 ``` {r}
 gendercleaning <- survey.2012 %>%
